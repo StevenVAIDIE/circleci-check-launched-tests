@@ -10,6 +10,7 @@ use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Pool;
 use Psr\Http\Message\ResponseInterface;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -39,9 +40,9 @@ class CircleCiDownloadJunitArtefactsCommand extends Command
 
         $this->clearOutputDir($outputDirectory);
         try {
-            $jobs = $this->getWorkflowJobs($workflowId);
-            $junitArtefacts = $this->getJunitArtefactsForJobs($jobs);
-            $this->downloadArtefacts($junitArtefacts, $outputDirectory);
+            $jobs = $this->getWorkflowJobs($workflowId, $output);
+            $junitArtefacts = $this->getJunitArtefactsForJobs($jobs, $output);
+            $this->downloadArtefacts($junitArtefacts, $outputDirectory, $output);
         } catch (\Throwable $e) {
             $output->writeln("Unable to download junit artefacts");
             $output->writeln($e->getMessage());
@@ -77,8 +78,9 @@ class CircleCiDownloadJunitArtefactsCommand extends Command
      * @throws GuzzleException
      * @throws \Exception
      */
-    private function getWorkflowJobs(string $workflowId): array
+    private function getWorkflowJobs(string $workflowId, OutputInterface $output): array
     {
+        $output->writeln('Retrieve jobs from workflow id');
         $response = $this->circleCiClient->request('GET', "api/v2/workflow/$workflowId/job", [
             'headers' => [
                 'Content-Type: application/json',
@@ -100,8 +102,10 @@ class CircleCiDownloadJunitArtefactsCommand extends Command
      * @return string[]
      * @throws GuzzleException
      */
-    private function getJunitArtefactsForJobs(array $jobs): array
+    private function getJunitArtefactsForJobs(array $jobs, OutputInterface $output): array
     {
+        $output->writeln("Retrieve artefacts from jobs");
+        $progressBar = new ProgressBar($output, count($jobs));
         $artefacts = [];
         foreach ($jobs as $job) {
             $projectSlug = $job['project_slug'];
@@ -126,19 +130,26 @@ class CircleCiDownloadJunitArtefactsCommand extends Command
                 ],
                 $junitArtefacts
             ));
+            $progressBar->advance();
         }
+
+        $progressBar->finish();
 
         return $artefacts;
     }
 
-    private function downloadArtefacts(array $artefacts, string $outputDirectory): void
+    private function downloadArtefacts(array $artefacts, string $outputDirectory, OutputInterface $output): void
     {
+        $output->writeln("Download artefacts");
+        $progressBar = new ProgressBar($output, count($artefacts));
+
         $pool = new Pool(
             $this->circleCiClient,
             $this->generatePromises($artefacts, $outputDirectory),
             [
                 'concurrency' => 20,
-                'fulfilled' => function (ResponseInterface $response, int $key) use ($artefacts, $outputDirectory) {
+                'fulfilled' => function () use ($progressBar) {
+                    $progressBar->advance();
                 },
                 'rejected' => function (RequestException $reason) {
                     throw new \Exception('Request rejected', previous: $reason);
@@ -148,6 +159,7 @@ class CircleCiDownloadJunitArtefactsCommand extends Command
 
         $promise = $pool->promise();
         $promise->wait();
+        $progressBar->finish();
     }
 
     private function generatePromises(array $artefacts, string $outputDirectory): \Iterator
