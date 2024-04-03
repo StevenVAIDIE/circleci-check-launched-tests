@@ -1,0 +1,24 @@
+#!/usr/bin/env php
+
+<?php
+
+require __DIR__.'/../vendor/autoload.php';
+
+use Akeneo\CircleCiDashboard\Infrastructure\Command\JunitAnalyzeTestsCommand;
+use Akeneo\CircleCiDashboard\Infrastructure\Command\CircleCiDownloadJunitArtefactsCommand;
+use Akeneo\CircleCiDashboard\Infrastructure\Command\JunitExtractTestsCommand;
+use Akeneo\CircleCiDashboard\Infrastructure\Command\GenerateDiffStatTestsCommand;
+use Symfony\Component\Console\Application;
+use Symfony\Component\Dotenv\Dotenv;
+
+$dotenv = new Dotenv();
+$dotenv->usePutenv();
+$dotenv->bootEnv(dirname(__DIR__) . '/.env');
+
+$application = new Application();
+$application->add(new CircleCiDownloadJunitArtefactsCommand($_ENV['CIRCLE_TOKEN']));
+$application->add(new JunitAnalyzeTestsCommand());
+$application->add(new JunitExtractTestsCommand());
+$application->add(new GenerateDiffStatTestsCommand());
+
+$application->run();
