@@ -8,6 +8,7 @@ use Akeneo\CircleCiDashboard\Infrastructure\Command\JunitAnalyzeTestsCommand;
 use Akeneo\CircleCiDashboard\Infrastructure\Command\CircleCiDownloadJunitArtefactsCommand;
 use Akeneo\CircleCiDashboard\Infrastructure\Command\JunitExtractTestsCommand;
 use Akeneo\CircleCiDashboard\Infrastructure\Command\GenerateDiffStatTestsCommand;
+use GuzzleHttp\Client;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Dotenv\Dotenv;
 
@@ -15,8 +16,15 @@ $dotenv = new Dotenv();
 $dotenv->usePutenv();
 $dotenv->bootEnv(dirname(__DIR__) . '/.env');
 
+$circleCiClient = new Client([
+    'base_uri' => 'https://circleci.com',
+    'headers' => [
+        'Circle-Token' => $_ENV['CIRCLE_TOKEN'],
+    ],
+]);
+
 $application = new Application();
-$application->add(new CircleCiDownloadJunitArtefactsCommand($_ENV['CIRCLE_TOKEN']));
+$application->add(new CircleCiDownloadJunitArtefactsCommand($circleCiClient));
 $application->add(new JunitAnalyzeTestsCommand());
 $application->add(new JunitExtractTestsCommand());
 $application->add(new GenerateDiffStatTestsCommand());
